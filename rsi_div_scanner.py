@@ -378,7 +378,7 @@ def analyze(sym, klines, ticker, k_daily=None):
     # SCENARIO 1 — BULLISH CLASSIC
     # Price making lower lows, RSI making higher lows
     # ─────────────────────────────────────────────────────────────────────
-    if settings["sc1_enabled"] and mode in ('downtrend','borderline'):
+    if settings["sc1_enabled"] and mode == 'downtrend':
         # Find chains of price lower lows where RSI matches higher lows
         # Build groups of consecutive pivot lows that form the divergence
         chains = []
@@ -388,7 +388,7 @@ def analyze(sym, klines, ticker, k_daily=None):
             # Find matching RSI low near this price pivot
             best_r = min(rsi_lows, key=lambda x: abs(x[0]-price_lows[start][0]),
                          default=None)
-            if best_r and abs(best_r[0]-price_lows[start][0]) <= fp+2:
+            if best_r and abs(best_r[0]-price_lows[start][0]) <= fp:
                 chain_r = [best_r]
             else:
                 continue
@@ -401,8 +401,9 @@ def analyze(sym, klines, ticker, k_daily=None):
                 if pv >= prev_pv: continue  # must be lower low
                 # Find RSI low near this price pivot
                 rr = min(rsi_lows, key=lambda x: abs(x[0]-pi), default=None)
-                if not rr or abs(rr[0]-pi) > fp+2: continue
+                if not rr or abs(rr[0]-pi) > fp: continue
                 prev_ri, prev_rv = chain_r[-1]
+                if rr[0] <= chain_r[-1][0]: continue  # RSI idx must advance
                 if rr[1] <= prev_rv: continue  # must be higher RSI low
                 chain_p.append(price_lows[nxt])
                 chain_r.append(rr)
@@ -421,6 +422,8 @@ def analyze(sym, klines, ticker, k_daily=None):
             rsi_newest = chain_r[-1][1]
             rsi_diff   = rsi_newest - rsi_oldest
             if rsi_diff < settings["min_rsi_diff"]: continue
+            # RSI extreme gate: at least the oldest pivot must be below 60
+            if rsi_oldest >= 60: continue
 
             # Volume at most recent price pivot
             p2i   = last_p_idx
@@ -542,13 +545,13 @@ def analyze(sym, klines, ticker, k_daily=None):
     # SCENARIO 3 — BEARISH CLASSIC
     # Price making higher highs, RSI making lower highs
     # ─────────────────────────────────────────────────────────────────────
-    if settings["sc3_enabled"] and mode in ('uptrend','borderline'):
+    if settings["sc3_enabled"] and mode == 'uptrend':
         chains = []
         for start in range(len(price_highs)):
             chain_p = [price_highs[start]]
             best_r  = min(rsi_highs, key=lambda x: abs(x[0]-price_highs[start][0]),
                           default=None)
-            if best_r and abs(best_r[0]-price_highs[start][0]) <= fp+2:
+            if best_r and abs(best_r[0]-price_highs[start][0]) <= fp:
                 chain_r = [best_r]
             else:
                 continue
@@ -560,8 +563,9 @@ def analyze(sym, klines, ticker, k_daily=None):
                 if pi - prev_pi > max_dist: break
                 if pv <= prev_pv: continue  # must be higher high
                 rr = min(rsi_highs, key=lambda x: abs(x[0]-pi), default=None)
-                if not rr or abs(rr[0]-pi) > fp+2: continue
+                if not rr or abs(rr[0]-pi) > fp: continue
                 prev_ri, prev_rv = chain_r[-1]
+                if rr[0] <= chain_r[-1][0]: continue  # RSI idx must advance
                 if rr[1] >= prev_rv: continue  # must be lower RSI high
                 chain_p.append(price_highs[nxt])
                 chain_r.append(rr)
@@ -578,6 +582,8 @@ def analyze(sym, klines, ticker, k_daily=None):
             rsi_newest = chain_r[-1][1]
             rsi_diff   = rsi_oldest - rsi_newest  # falling RSI
             if rsi_diff < settings["min_rsi_diff"]: continue
+            # RSI extreme gate: at least the oldest pivot must be above 40
+            if rsi_oldest <= 40: continue
 
             p2i   = last_p_idx
             sv    = max(0,p2i-10); ev = min(len(vols),p2i+10)
