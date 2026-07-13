@@ -1472,13 +1472,16 @@ function openChart(symbol){
       if(d.error){document.getElementById('chart-loading').textContent='Error: '+d.error;return;}
       document.getElementById('chart-loading').style.display='none';
       document.getElementById('chart-content').style.display='block';
-      drawCharts(d, sigs);
+      // Small delay to allow DOM to render before measuring widths
+      setTimeout(function(){ drawCharts(d, sigs); }, 50);
     })
     .catch(function(e){document.getElementById('chart-loading').textContent='Failed: '+e;});
 }
 
 function cOpts(elId, h){
-  var w=document.getElementById(elId).parentElement.clientWidth-36;
+  var el=document.getElementById(elId);
+  var parent=el?el.parentElement:null;
+  var w=parent&&parent.clientWidth>0?parent.clientWidth-36:800;
   return {width:w,height:h,
     layout:{background:{color:'transparent'},textColor:'#3d4f72'},
     grid:{vertLines:{color:'rgba(19,24,42,0.8)'},horzLines:{color:'rgba(19,24,42,0.8)'}},
@@ -1488,7 +1491,9 @@ function cOpts(elId, h){
 }
 
 function drawCharts(d, sigs){
-  var w=document.getElementById('chart-main').parentElement.clientWidth-36;
+  // Get width from chart-box which is always visible
+  var box=document.querySelector('.chart-box');
+  var w=box?(box.clientWidth-36):800;
 
   // ── Price chart ─────────────────────────────────────────────────────────
   mainChart=LightweightCharts.createChart(document.getElementById('chart-main'),
@@ -1523,9 +1528,14 @@ function drawCharts(d, sigs){
   mainChart.timeScale().fitContent();
 
   // ── RSI chart ────────────────────────────────────────────────────────────
-  rsiChart=LightweightCharts.createChart(document.getElementById('chart-rsi'),
-    Object.assign(cOpts('chart-rsi',180),{width:w,
-      rightPriceScale:{scaleMargins:{top:0.1,bottom:0.1}}}));
+  rsiChart=LightweightCharts.createChart(document.getElementById('chart-rsi'),{
+    width:w, height:180,
+    layout:{background:{color:'transparent'},textColor:'#3d4f72'},
+    grid:{vertLines:{color:'rgba(19,24,42,0.8)'},horzLines:{color:'rgba(19,24,42,0.8)'}},
+    crosshair:{mode:1},
+    rightPriceScale:{borderColor:'#13182a',scaleMargins:{top:0.1,bottom:0.1}},
+    timeScale:{borderColor:'#13182a',timeVisible:true},
+  });
   var rsiLine=rsiChart.addLineSeries({color:'#a78bfa',lineWidth:1.5,
     priceLineVisible:false,lastValueVisible:true});
   rsiLine.setData(d.rsi);
@@ -1546,15 +1556,18 @@ function drawCharts(d, sigs){
       priceLineVisible:false,lastValueVisible:false,crosshairMarkerVisible:false});
     var pts=sig.rsi_idxs.map(function(idx,ii){
       var b=d.ohlcv[idx];
-      if(!b) return null;
+      if(!b||sig.rsi_vals[ii]==null) return null;
       return {time:b.t,value:sig.rsi_vals[ii]};
     }).filter(Boolean);
     if(pts.length>=2) rDivLine.setData(pts);
-    var markers=pts.map(function(p){
-      return {time:p.time,position:isBull?'belowBar':'aboveBar',
-        color:col,shape:'circle',size:1};
-    });
-    if(markers.length) rDivLine.setMarkers(markers);
+    // Circle markers at each RSI pivot
+    if(pts.length>=1){
+      rDivLine.setMarkers(pts.map(function(p){
+        return {time:p.time,
+          position:isBull?'belowBar':'aboveBar',
+          color:col,shape:'circle',size:2};
+      }));
+    }
   });
 
   // Sync time scales
